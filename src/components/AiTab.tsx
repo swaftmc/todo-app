@@ -1,43 +1,82 @@
 import { useState, useRef, useEffect } from "react";
 import type { Task } from "../types";
-import { chat, parseChanges, digestTasks, getApiKey, getModel, type ChatMessage, type TodoChange } from "../utils/ai";
+import { chat, parseChanges, digestTasks, getApiKey, type ChatMessage, type TodoChange } from "../utils/ai";
+
+interface Chat {
+  id: string;
+  title: string;
+  messages: ChatMessage[];
+}
 
 interface Props {
   tasks: Task[];
   onApplyChange: (change: TodoChange) => void;
 }
 
-export default function AiTab({ tasks, onApplyChange }: Props) {
-  const [messages, setMessages] = useState<ChatMessage[]>(() => {
-    try {
-      const raw = localStorage.getItem("todo.aiChat");
-      return raw ? JSON.parse(raw) : [];
-    } catch {
-      return [];
+function loadChats(): Chat[] {
+  try {
+    const raw = localStorage.getItem("todo.aiChats");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length) return parsed;
     }
-  });
+  } catch {}
+  // migrate legacy single chat
+  try {
+    const legacy = localStorage.getItem("todo.aiChat");
+    if (legacy) {
+      const msgs = JSON.parse(legacy);
+      if (Array.isArray(msgs) && msgs.length) {
+        return [{ id: "c1", title: msgs[0]?.content?.slice(0, 40) || "Chat 1", messages: msgs }];
+      }
+    }
+  } catch {}
+  return [{ id: "c1", title: "New chat", messages: [] }];
+}
+
+function newId() {
+  return "c" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+export default function AiTab({ tasks, onApplyChange }: Props) {
+  const [chats, setChats] = useState<Chat[]>(loadChats);
+  const [activeId, setActiveId] = useState<string>(() => loadChats()[0].id);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    localStorage.setItem("todo.aiChat", JSON.stringify(messages));
+    localStorage.setItem("todo.aiChats", JSON.stringify(chats));
+  }, [chats]);
+
+  useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [messages]);
+  }, [chats, activeId]);
+
+  const activeChat = chats.find((c) => c.id === activeId) ?? chats[0];
+
+  const updateActive = (updater: (msgs: ChatMessage[]) => ChatMessage[]) => {
+    setChats((prev) => prev.map((c) => (c.id === activeId ? { ...c, messages: updater(c.messages) } : c)));
+  };
 
   const send = async () => {
     if (!input.trim() || loading) return;
     const userMsg: ChatMessage = { role: "user", content: input.trim() };
-    const next = [...messages, userMsg];
-    setMessages(next);
+    const next = [...(activeChat?.messages ?? []), userMsg];
+    updateActive(() => next);
     setInput("");
     setLoading(true);
     setError("");
     try {
       const result = await chat(next, digestTasks(tasks));
       const changes = parseChanges(result.content);
-      setMessages([...next, { role: "assistant", content: result.content, model: result.model, changes }]);
+      updateActive(() => [...next, { role: "assistant", content: result.content, model: result.model, changes }]);
+      setChats((prev) => prev.map((c) => {
+        if (c.id !== activeId) return c;
+        if (c.title === "New chat") return { ...c, title: input.trim().slice(0, 40) };
+        return c;
+      }));
     } catch (e: any) {
       setError(e?.message ?? String(e));
     } finally {
@@ -45,35 +84,77 @@ export default function AiTab({ tasks, onApplyChange }: Props) {
     }
   };
 
-  const clearChat = () => {
-    setMessages([]);
-    localStorage.removeItem("todo.aiChat");
+  const clearChat = () => updateActive(() => []);
+
+  const newChat = () => {
+    const c: Chat = { id: newId(), title: "New chat", messages: [] };
+    setChats((prev) => [c, ...prev]);
+    setActiveId(c.id);
+  };
+
+  const deleteChat = (id: string) => {
+    setChats((prev) => {
+      const filtered = prev.filter((c) => c.id !== id);
+      if (filtered.length === 0) return [{ id: newId(), title: "New chat", messages: [] }];
+      return filtered;
+    });
+    if (activeId === id) {
+      const remaining = chats.filter((c) => c.id !== id);
+      setActiveId(remaining.length ? remaining[0].id : chats[0]?.id);
+    }
   };
 
   const applyChange = (change: TodoChange, msgIdx: number, changeIdx: number) => {
     onApplyChange(change);
-    setMessages((prev) => {
-      const updated = [...prev];
+    updateActive((msgs) => {
+      const updated = [...msgs];
       const msg = { ...updated[msgIdx] };
-      if (msg.changes) {
-        msg.changes = msg.changes.filter((_, i) => i !== changeIdx);
-      }
+      if (msg.changes) msg.changes = msg.changes.filter((_, i) => i !== changeIdx);
       updated[msgIdx] = msg;
       return updated;
     });
   };
+
+  const revertMessage = (mi: number) => {
+    const msgs = activeChat?.messages ?? [];
+    const target = msgs[mi];
+    if (!target || target.role !== "user") return;
+    setInput(target.content);
+    updateActive((m) => {
+      const out = m.slice(0, mi);
+      if (m[mi + 1]?.role === "assistant") return out;
+      return out;
+    });
+  };
+
+  const clean = (s: string) =>
+    s
+      .replace(/<\|tool_call_start\|>[\s\S]*?<\|tool_call_end\|>/g, "")
+      .replace(/```todo-change[\s\S]*?```/g, "")
+      .replace(/todoChange\([\s\S]*?\)/g, "")
+      .trim();
 
   return (
     <div className="ai-page" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
       <div className="page-header">
         <h1>AI Coach</h1>
         <div className="actions">
-          <span className="ai-coach-blurb">Model: {getModel()}</span>
-          <button className="btn btn-ghost btn-sm" onClick={clearChat}>Clear chat</button>
+          <select
+            value={activeId}
+            onChange={(e) => setActiveId(e.target.value)}
+            style={{ padding: "6px 10px", border: "1px solid var(--border)", borderRadius: "var(--r-sm)", background: "var(--surface)" }}
+          >
+            {chats.map((c) => (
+              <option key={c.id} value={c.id}>{c.title}</option>
+            ))}
+          </select>
+          <button className="btn btn-secondary btn-sm" onClick={newChat}>+ New</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => deleteChat(activeId)}>Delete</button>
+          <button className="btn btn-ghost btn-sm" onClick={clearChat}>Clear</button>
         </div>
       </div>
       <div ref={scrollRef} className="ai-scroll" style={{ flex: 1 }}>
-        {messages.length === 0 && (
+        {(activeChat?.messages ?? []).length === 0 && (
           <div className="ai-empty">
             <div className="icon-wrap">AI</div>
             <h3>Ask your todo coach</h3>
@@ -85,31 +166,20 @@ export default function AiTab({ tasks, onApplyChange }: Props) {
             </div>
           </div>
         )}
-        {messages.map((m, mi) => (
+        {(activeChat?.messages ?? []).map((m, mi) => (
           <div key={mi} className={`ai-msg ${m.role === "user" ? "ai-msg-user" : "ai-msg-assistant"}`}>
             {m.role === "assistant" && <div className="ai-avatar">AI</div>}
             <div className="ai-bubble">
               <div className="ai-msg-text" style={{ whiteSpace: "pre-wrap" }}>
-                {m.content
-                  .replace(/<\|tool_call_start\|>[\s\S]*?<\|tool_call_end\|>/g, "")
-                  .replace(/```todo-change[\s\S]*?```/g, "")
-                  .replace(/todoChange\([\s\S]*?\)/g, "")
-                  .trim() || (m.changes?.length ? "" : m.content)}
+                {clean(m.content) || (m.changes?.length ? "" : m.content)}
               </div>
-              {m.role === "assistant" && (
-                <div className="ai-msg-meta">Model: {m.model ?? getModel()}</div>
-              )}
               {m.role === "user" && (
                 <div style={{ marginTop: 4, textAlign: "right" }}>
-                  <button className="btn btn-ghost btn-sm" onClick={() => {
-                    setInput(m.content);
-                    setMessages((prev) => {
-                      const out = prev.slice(0, mi);
-                      // also drop following assistant if present
-                      if (prev[mi + 1]?.role === "assistant") return out;
-                      return out;
-                    });
-                  }}>Revert</button>
+                  <button
+                    onClick={() => revertMessage(mi)}
+                    title="Revert"
+                    style={{ background: "transparent", border: 0, cursor: "pointer", color: "var(--text-soft)", fontSize: 14, padding: 2 }}
+                  >↩</button>
                 </div>
               )}
               {m.changes && m.changes.length > 0 && (
