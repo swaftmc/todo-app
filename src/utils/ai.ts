@@ -44,17 +44,41 @@ export function getBase(): string {
   return PROVIDERS[getProvider()].base;
 }
 
-function endpoint(): string {
-  return `${getBase()}/chat/completions`;
+export function getProxyUrl(): string {
+  return localStorage.getItem("todo.proxyUrl") ?? "";
+}
+export function setProxyUrl(u: string) {
+  localStorage.setItem("todo.proxyUrl", u.trim());
+}
+export async function detectProxy(): Promise<string | null> {
+  if (getProxyUrl()) return getProxyUrl();
+  try {
+    const r = await fetch("http://localhost:8787/health", { signal: AbortSignal.timeout(800) });
+    if (r.ok) {
+      const u = "http://localhost:8787";
+      setProxyUrl(u);
+      return u;
+    }
+  } catch {
+    // no local proxy
+  }
+  return null;
 }
 
 export async function generateTodos(prompt: string, apiKey: string): Promise<AiTask[]> {
   const key = (apiKey || "anonymous").trim();
+  const proxy = getProxyUrl();
+  const targetBase = getBase();
+  const url = proxy
+    ? `${proxy.replace(/\/$/, "")}/chat/completions`
+    : `${targetBase}/chat/completions`;
+  const headers: Record<string, string> = { "Content-Type": "application/json", Authorization: `Bearer ${key}` };
+  if (proxy) headers["X-Target-URL"] = `${targetBase}/chat/completions`;
   let res: Response;
   try {
-    res = await fetch(endpoint(), {
+    res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+      headers,
       body: JSON.stringify({
         model: getModel(),
         temperature: 0.4,
@@ -65,7 +89,7 @@ export async function generateTodos(prompt: string, apiKey: string): Promise<AiT
       }),
     });
   } catch (e: any) {
-    throw new Error(`Network/CORS error: ${e?.message ?? e}. Try a CORS-friendly provider (OpenRouter/AnyRouter).`);
+    throw new Error(`Network/CORS error: ${e?.message ?? e}. Try a CORS-friendly provider (OpenRouter/AnyRouter) or run the local proxy.`);
   }
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
   const data = await res.json();
@@ -110,11 +134,18 @@ export async function chat(messages: ChatMessage[], context: string): Promise<st
   const key = (getApiKey() || "anonymous").trim();
   const model = getModel();
   const system = `You are a todo-list coach. Help the user manage their todos. You may propose changes by emitting fenced code blocks tagged todo-change containing a JSON object. Format: {"action":"add"|"update"|"delete","id":"..." (for update/delete),"parentId":null|string (for add),"fields":{"title","notes","priority","dueAt","recurrence","done"}}. Nothing is saved until the user approves. Only propose changes when asked or when describing todos to record. Explain each change in a sentence. Format replies in Markdown. Current todos:\n${context}`;
+  const proxy = getProxyUrl();
+  const targetBase = getBase();
+  const url = proxy
+    ? `${proxy.replace(/\/$/, "")}/chat/completions`
+    : `${targetBase}/chat/completions`;
+  const headers: Record<string, string> = { "Content-Type": "application/json", Authorization: `Bearer ${key}` };
+  if (proxy) headers["X-Target-URL"] = `${targetBase}/chat/completions`;
   let res: Response;
   try {
-    res = await fetch(endpoint(), {
+    res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+      headers,
       body: JSON.stringify({
         model,
         temperature: 0.5,
@@ -122,7 +153,7 @@ export async function chat(messages: ChatMessage[], context: string): Promise<st
       }),
     });
   } catch (e: any) {
-    throw new Error(`Network/CORS error: ${e?.message ?? e}. Try a CORS-friendly provider (OpenRouter/AnyRouter) or run a local proxy.`);
+    throw new Error(`Network/CORS error: ${e?.message ?? e}. Try a CORS-friendly provider (OpenRouter/AnyRouter) or run the local proxy.`);
   }
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
   const data = await res.json();

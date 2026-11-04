@@ -6,6 +6,7 @@ import type {
   Tag,
 } from "./types";
 import { DEFAULT_FILTER } from "./types";
+import { detectProxy } from "./utils/ai";
 import { newId } from "./utils/ids";
 import { nowIso, isOverdue, todayBounds, thisWeekEnd } from "./utils/dates";
 import { nextDue } from "./utils/recurrence";
@@ -59,6 +60,9 @@ export default function App() {
 
   const [view, setView] = useState<"tasks" | "ai" | "settings">("tasks");
   const [dialogTask, setDialogTask] = useState<Task | null>(null);
+  useEffect(() => {
+    detectProxy();
+  }, []);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newParentId, setNewParentId] = useState<string | null>(null);
   const [missed, setMissed] = useState<Task[]>([]);

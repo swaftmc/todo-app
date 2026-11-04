@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { clearState } from "../storage";
-import { getProvider, setProvider, getApiKey, setApiKey, getModel, setModel as setStoredModel, PROVIDERS, type ProviderId } from "../utils/ai";
+import { getProvider, setProvider, getApiKey, setApiKey, getModel, setModel as setStoredModel, getProxyUrl, setProxyUrl, PROVIDERS, type ProviderId } from "../utils/ai";
 
 export default function Settings() {
   const [provider, setProviderState] = useState(getProvider());
   const [key, setKey] = useState(getApiKey());
   const [model, setModel] = useState(getModel());
+  const [proxyUrl, setProxyUrlState] = useState(getProxyUrl());
   const [saved, setSaved] = useState(false);
 
   const switchProvider = (p: ProviderId) => {
@@ -18,6 +19,7 @@ export default function Settings() {
   const save = () => {
     setApiKey(key);
     setStoredModel(model);
+    setProxyUrl(proxyUrl);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -44,6 +46,11 @@ export default function Settings() {
           <label>AI model</label>
           <input value={model} onChange={(e) => setModel(e.target.value)} placeholder={PROVIDERS[provider].model} />
           <span className="hint">Default: {PROVIDERS[provider].model}</span>
+        </div>
+        <div className="field">
+          <label>Proxy URL (optional, for Kilo CORS)</label>
+          <input value={proxyUrl} onChange={(e) => setProxyUrlState(e.target.value)} placeholder="http://localhost:8787" />
+          <span className="hint">Run `node proxy/server.mjs` then set this. Leave empty for direct fetch.</span>
         </div>
         <div className="form-actions">
           <button className="primary" onClick={save}>Save</button>
