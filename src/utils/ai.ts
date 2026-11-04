@@ -134,7 +134,8 @@ export function digestTasks(tasks: { id: string; title: string; done: boolean; d
 export async function chat(messages: ChatMessage[], context: string): Promise<{ content: string; model: string }> {
   const key = (getApiKey() || "anonymous").trim();
   const model = getModel();
-  const system = `You are a todo-list coach. Help the user manage their todos. You may propose changes by emitting fenced code blocks tagged todo-change containing a JSON object. Format: {"action":"add"|"update"|"delete","id":"..." (for update/delete),"parentId":null|string (for add),"fields":{"title","notes","priority","dueAt","recurrence","done"}}. Nothing is saved until the user approves. Only propose changes when asked or when describing todos to record. Explain each change in a sentence. Format replies in Markdown. Current todos:\n${context}`;
+  const now = new Date().toLocaleString();
+  const system = `You are a todo-list coach. Help the user manage their todos. Current system time: ${now}. You may propose changes by emitting fenced code blocks tagged todo-change containing a JSON object. Format: {"action":"add"|"update"|"delete","id":"..." (for update/delete),"parentId":null|string (for add),"fields":{"title","notes","priority","dueAt","recurrence","done"}}. Nothing is saved until the user approves. Only propose changes when asked or when describing todos to record. Explain each change in a sentence. Format replies in Markdown. Current todos:\n${context}`;
   const proxy = getProxyUrl();
   const targetBase = getBase();
   const url = proxy
@@ -166,19 +167,40 @@ export async function chat(messages: ChatMessage[], context: string): Promise<{ 
 
 export function parseChanges(content: string): TodoChange[] {
   const out: TodoChange[] = [];
-  // fenced todo-change blocks
-  const re = /```todo-change\s*([\s\S]*?)```/g;
+  const seen = new Set<string>();
+
+  const tryAdd = (obj: any) => {
+    if (!obj || typeof obj !== "object") return;
+    if (obj.action !== "add" && obj.action !== "update" && obj.action !== "delete") return;
+    if (!obj.fields || typeof obj.fields !== "object") return;
+    const key = JSON.stringify(obj);
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(obj as TodoChange);
+  };
+
+  // fenced code blocks (todo-change or json)
+  const fenceRe = /```(?:todo-change|json)?\s*([\s\S]*?)```/g;
   let m;
-  while ((m = re.exec(content)) !== null) {
-    try {
-      const obj = JSON.parse(m[1].trim());
-      if (obj && (obj.action === "add" || obj.action === "update" || obj.action === "delete")) {
-        out.push(obj as TodoChange);
-      }
-    } catch {
-      // ignore
+  while ((m = fenceRe.exec(content)) !== null) {
+    try { tryAdd(JSON.parse(m[1].trim())); } catch { /* ignore */ }
+  }
+
+  // bare JSON objects containing "action"
+  const bareRe = /\{\s*"action"\s*:\s*"(add|update|delete)"[\s\S]*?\}/g;
+  let bm;
+  while ((bm = bareRe.exec(content)) !== null) {
+    const start = bm.index;
+    let depth = 0, end = -1;
+    for (let i = start; i < content.length; i++) {
+      if (content[i] === "{") depth++;
+      else if (content[i] === "}") { depth--; if (depth === 0) { end = i; break; } }
+    }
+    if (end !== -1) {
+      try { tryAdd(JSON.parse(content.slice(start, end + 1))); } catch { /* ignore */ }
     }
   }
+
   // tool-call style: todoChange(action=..., parentId=..., fields={...})
   const toolRe = /todoChange\s*\(([\s\S]*?)\)/g;
   let tm;
@@ -190,7 +212,6 @@ export function parseChanges(content: string): TodoChange[] {
     const parentId = parentMatch ? (parentMatch[1] === "" ? null : parentMatch[1]) : null;
     const idMatch = args.match(/\bid\s*=\s*['"]([^'"]*)['"]/);
     const id = idMatch ? idMatch[1] : undefined;
-    // extract fields={...} balanced
     const fieldsStart = args.indexOf("fields=");
     let fields: any = {};
     if (fieldsStart !== -1) {
@@ -204,13 +225,13 @@ export function parseChanges(content: string): TodoChange[] {
         }
         if (end !== -1) {
           let jsonStr = args.slice(braceStart, end + 1);
-          // convert single quotes to double quotes (best effort)
           jsonStr = jsonStr.replace(/'/g, '"');
           try { fields = JSON.parse(jsonStr); } catch { fields = {}; }
         }
       }
     }
-    out.push({ action: action as any, id, parentId, fields });
+    tryAdd({ action, id, parentId, fields });
   }
+
   return out;
 }

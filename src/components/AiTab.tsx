@@ -130,7 +130,7 @@ export default function AiTab({ tasks, onApplyChange }: Props) {
   const clean = (s: string) =>
     s
       .replace(/<\|tool_call_start\|>[\s\S]*?<\|tool_call_end\|>/g, "")
-      .replace(/```todo-change[\s\S]*?```/g, "")
+      .replace(/```(?:todo-change|json)?[\s\S]*?```/g, "")
       .replace(/todoChange\([\s\S]*?\)/g, "")
       .trim();
 
