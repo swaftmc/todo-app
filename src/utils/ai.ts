@@ -134,7 +134,8 @@ export function digestTasks(tasks: { id: string; title: string; done: boolean; d
 export async function chat(messages: ChatMessage[], context: string): Promise<{ content: string; model: string }> {
   const key = (getApiKey() || "anonymous").trim();
   const model = getModel();
-  const system = `You are a todo-list coach. Help the user manage their todos. You may propose changes by emitting fenced code blocks tagged todo-change containing a JSON object. Format: {"action":"add"|"update"|"delete","id":"..." (for update/delete),"parentId":null|string (for add),"fields":{"title","notes","priority","dueAt","recurrence","done"}}. Nothing is saved until the user approves. Only propose changes when asked or when describing todos to record. Explain each change in a sentence. Format replies in Markdown. Current todos:\n${context}`;
+  const now = new Date().toLocaleString();
+  const system = `You are a todo-list coach. Help the user manage their todos. Current system time: ${now}. You may propose changes by emitting fenced code blocks tagged todo-change containing a JSON object. Format: {"action":"add"|"update"|"delete","id":"..." (for update/delete),"parentId":null|string (for add),"fields":{"title","notes","priority","dueAt","recurrence","done"}}. Nothing is saved until the user approves. Only propose changes when asked or when describing todos to record. Explain each change in a sentence. Format replies in Markdown. Current todos:\n${context}`;
   const proxy = getProxyUrl();
   const targetBase = getBase();
   const url = proxy

@@ -399,8 +399,6 @@ export default function App() {
       <main className="main">
         {view === "settings" ? (
           <Settings />
-        ) : view === "ai" ? (
-          <AiTab tasks={state.tasks} onApplyChange={handleApplyChange} />
         ) : (
           <div className="page">
             {missed.length > 0 && (
@@ -511,6 +509,9 @@ export default function App() {
             </div>
           </div>
         )}
+        <div style={{ display: view === "ai" ? "flex" : "none", flex: 1, minHeight: 0 }}>
+          <AiTab tasks={state.tasks} onApplyChange={handleApplyChange} visible={view === "ai"} />
+        </div>
       </main>
       <TaskDialog
         open={dialogOpen}
