@@ -35,9 +35,9 @@ export default function AiTab({ tasks, onApplyChange }: Props) {
     setLoading(true);
     setError("");
     try {
-      const content = await chat(next, digestTasks(tasks));
-      const changes = parseChanges(content);
-      setMessages([...next, { role: "assistant", content, changes }]);
+      const result = await chat(next, digestTasks(tasks));
+      const changes = parseChanges(result.content);
+      setMessages([...next, { role: "assistant", content: result.content, model: result.model, changes }]);
     } catch (e: any) {
       setError(e?.message ?? String(e));
     } finally {
@@ -92,11 +92,12 @@ export default function AiTab({ tasks, onApplyChange }: Props) {
               <div className="ai-msg-text" style={{ whiteSpace: "pre-wrap" }}>
                 {m.content
                   .replace(/<\|tool_call_start\|>[\s\S]*?<\|tool_call_end\|>/g, "")
+                  .replace(/```todo-change[\s\S]*?```/g, "")
                   .replace(/todoChange\([\s\S]*?\)/g, "")
                   .trim() || (m.changes?.length ? "" : m.content)}
               </div>
               {m.role === "assistant" && (
-                <div className="ai-msg-meta">Model: {getModel()}</div>
+                <div className="ai-msg-meta">Model: {m.model ?? getModel()}</div>
               )}
               {m.role === "user" && (
                 <div style={{ marginTop: 4, textAlign: "right" }}>

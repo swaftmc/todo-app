@@ -120,6 +120,7 @@ function parseTasks(content: string): AiTask[] {
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+  model?: string;
   changes?: TodoChange[];
 }
 
@@ -130,7 +131,7 @@ export function digestTasks(tasks: { id: string; title: string; done: boolean; d
     .join("\n");
 }
 
-export async function chat(messages: ChatMessage[], context: string): Promise<string> {
+export async function chat(messages: ChatMessage[], context: string): Promise<{ content: string; model: string }> {
   const key = (getApiKey() || "anonymous").trim();
   const model = getModel();
   const system = `You are a todo-list coach. Help the user manage their todos. You may propose changes by emitting fenced code blocks tagged todo-change containing a JSON object. Format: {"action":"add"|"update"|"delete","id":"..." (for update/delete),"parentId":null|string (for add),"fields":{"title","notes","priority","dueAt","recurrence","done"}}. Nothing is saved until the user approves. Only propose changes when asked or when describing todos to record. Explain each change in a sentence. Format replies in Markdown. Current todos:\n${context}`;
@@ -157,7 +158,10 @@ export async function chat(messages: ChatMessage[], context: string): Promise<st
   }
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
   const data = await res.json();
-  return data?.choices?.[0]?.message?.content ?? "";
+  return {
+    content: data?.choices?.[0]?.message?.content ?? "",
+    model: data?.model ?? model,
+  };
 }
 
 export function parseChanges(content: string): TodoChange[] {
