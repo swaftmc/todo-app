@@ -258,3 +258,16 @@ dialog::backdrop { background: rgba(60,64,67,.45); }
 .empty{display:flex;flex-direction:column;align-items:center;text-align:center;gap:var(--s3);padding:var(--s9) var(--s5);color:var(--text-muted)}
 .empty h3{color:var(--text-muted);font-weight:400;font-size:16px}
 @media(max-width:900px){.app-shell{grid-template-columns:1fr;grid-template-rows:64px 1fr}.sidebar{display:none}}
+
+/* ai chat list */
+.ai-chats{width:240px;flex-shrink:0;overflow-y:auto;padding:8px;background:var(--bg-2);border-right:1px solid var(--border);display:flex;flex-direction:column;gap:2px}
+.ai-chat-item{display:flex;align-items:center;border-radius:var(--r-md);padding:2px}
+.ai-chat-item:hover{background:var(--hover)}
+.ai-chat-item.active{background:var(--selected)}
+.ai-chat-open{flex:1;min-width:0;text-align:left;background:transparent;border:0;padding:8px 10px;font:inherit;font-size:13px;color:var(--text);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-radius:var(--r-md)}
+.ai-chat-open:hover{background:var(--hover)}
+.ai-chat-act{display:grid;place-items:center;flex-shrink:0;width:26px;height:26px;border:0;border-radius:var(--r-sm);background:transparent;color:var(--text-soft);cursor:pointer;opacity:0;font-size:14px}
+.ai-chat-item:hover .ai-chat-act,.ai-chat-item.active .ai-chat-act{opacity:1}
+.ai-chat-act:hover{color:var(--text);background:var(--hover)}
+.ai-chat-del:hover{color:var(--red-500)}
+.ai-coach-blurb{font-size:12px;color:var(--text-muted)}
