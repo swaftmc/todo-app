@@ -16,14 +16,14 @@ export interface TodoChange {
 export type ProviderId = "kilo" | "openrouter" | "anyrouter";
 
 export const PROVIDERS: Record<ProviderId, { name: string; base: string; model: string; proxy: boolean }> = {
-  kilo: { name: "Kilo Gateway", base: "https://ai-gateway.kilo.ai/api/v1", model: "reflection/beam-free", proxy: true },
+  kilo: { name: "Kilo Gateway", base: "https://ai-gateway.kilo.ai/api/v1", model: "reflection/beam-free", proxy: false },
   openrouter: { name: "OpenRouter", base: "https://openrouter.ai/api/v1", model: "openrouter/free", proxy: false },
   anyrouter: { name: "AnyRouter", base: "https://anyrouter.dev/api/v1", model: "anyrouter/free", proxy: false },
 };
 
 export function getProvider(): ProviderId {
   const v = localStorage.getItem("todo.aiProvider");
-  return (v && v in PROVIDERS ? v : "kilo") as ProviderId;
+  return (v && v in PROVIDERS ? v : "openrouter") as ProviderId;
 }
 export function setProvider(p: ProviderId) {
   localStorage.setItem("todo.aiProvider", p);
@@ -45,27 +45,28 @@ export function getBase(): string {
 }
 
 function endpoint(): string {
-  const url = `${getBase()}/chat/completions`;
-  if (PROVIDERS[getProvider()].proxy) {
-    return `https://corsproxy.io/?${encodeURIComponent(url)}`;
-  }
-  return url;
+  return `${getBase()}/chat/completions`;
 }
 
 export async function generateTodos(prompt: string, apiKey: string): Promise<AiTask[]> {
   const key = (apiKey || "anonymous").trim();
-  const res = await fetch(endpoint(), {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-    body: JSON.stringify({
-      model: getModel(),
-      temperature: 0.4,
-      messages: [
-        { role: "system", content: "You are a todo-list assistant. Return ONLY a valid JSON array of task objects: {\"title\": string, \"notes\": string (optional), \"priority\": number 0-3, \"dueAt\": ISO string or null, \"recurrence\": null or {\"freq\":\"daily\"|\"weekly\"|\"monthly\",\"interval\":number}. No markdown." },
-        { role: "user", content: prompt },
-      ],
-    }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(endpoint(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+      body: JSON.stringify({
+        model: getModel(),
+        temperature: 0.4,
+        messages: [
+          { role: "system", content: "You are a todo-list assistant. Return ONLY a valid JSON array of task objects: {\"title\": string, \"notes\": string (optional), \"priority\": number 0-3, \"dueAt\": ISO string or null, \"recurrence\": null or {\"freq\":\"daily\"|\"weekly\"|\"monthly\",\"interval\":number}. No markdown." },
+          { role: "user", content: prompt },
+        ],
+      }),
+    });
+  } catch (e: any) {
+    throw new Error(`Network/CORS error: ${e?.message ?? e}. Try a CORS-friendly provider (OpenRouter/AnyRouter).`);
+  }
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
   const data = await res.json();
   const content: string = data?.choices?.[0]?.message?.content ?? "";
@@ -109,15 +110,20 @@ export async function chat(messages: ChatMessage[], context: string): Promise<st
   const key = (getApiKey() || "anonymous").trim();
   const model = getModel();
   const system = `You are a todo-list coach. Help the user manage their todos. You may propose changes by emitting fenced code blocks tagged todo-change containing a JSON object. Format: {"action":"add"|"update"|"delete","id":"..." (for update/delete),"parentId":null|string (for add),"fields":{"title","notes","priority","dueAt","recurrence","done"}}. Nothing is saved until the user approves. Only propose changes when asked or when describing todos to record. Explain each change in a sentence. Format replies in Markdown. Current todos:\n${context}`;
-  const res = await fetch(endpoint(), {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-    body: JSON.stringify({
-      model,
-      temperature: 0.5,
-      messages: [{ role: "system", content: system }, ...messages.map((m) => ({ role: m.role, content: m.content }))],
-    }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(endpoint(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+      body: JSON.stringify({
+        model,
+        temperature: 0.5,
+        messages: [{ role: "system", content: system }, ...messages.map((m) => ({ role: m.role, content: m.content }))],
+      }),
+    });
+  } catch (e: any) {
+    throw new Error(`Network/CORS error: ${e?.message ?? e}. Try a CORS-friendly provider (OpenRouter/AnyRouter) or run a local proxy.`);
+  }
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
   const data = await res.json();
   return data?.choices?.[0]?.message?.content ?? "";
