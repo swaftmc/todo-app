@@ -162,6 +162,7 @@ export async function chat(messages: ChatMessage[], context: string): Promise<st
 
 export function parseChanges(content: string): TodoChange[] {
   const out: TodoChange[] = [];
+  // fenced todo-change blocks
   const re = /```todo-change\s*([\s\S]*?)```/g;
   let m;
   while ((m = re.exec(content)) !== null) {
@@ -173,6 +174,39 @@ export function parseChanges(content: string): TodoChange[] {
     } catch {
       // ignore
     }
+  }
+  // tool-call style: todoChange(action=..., parentId=..., fields={...})
+  const toolRe = /todoChange\s*\(([\s\S]*?)\)/g;
+  let tm;
+  while ((tm = toolRe.exec(content)) !== null) {
+    const args = tm[1];
+    const actionMatch = args.match(/action\s*=\s*['"](\w+)['"]/);
+    const action = actionMatch ? actionMatch[1] : "add";
+    const parentMatch = args.match(/parentId\s*=\s*['"]([^'"]*)['"]/);
+    const parentId = parentMatch ? (parentMatch[1] === "" ? null : parentMatch[1]) : null;
+    const idMatch = args.match(/\bid\s*=\s*['"]([^'"]*)['"]/);
+    const id = idMatch ? idMatch[1] : undefined;
+    // extract fields={...} balanced
+    const fieldsStart = args.indexOf("fields=");
+    let fields: any = {};
+    if (fieldsStart !== -1) {
+      const braceStart = args.indexOf("{", fieldsStart);
+      if (braceStart !== -1) {
+        let depth = 0;
+        let end = -1;
+        for (let i = braceStart; i < args.length; i++) {
+          if (args[i] === "{") depth++;
+          else if (args[i] === "}") { depth--; if (depth === 0) { end = i; break; } }
+        }
+        if (end !== -1) {
+          let jsonStr = args.slice(braceStart, end + 1);
+          // convert single quotes to double quotes (best effort)
+          jsonStr = jsonStr.replace(/'/g, '"');
+          try { fields = JSON.parse(jsonStr); } catch { fields = {}; }
+        }
+      }
+    }
+    out.push({ action: action as any, id, parentId, fields });
   }
   return out;
 }

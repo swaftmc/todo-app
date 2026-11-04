@@ -89,7 +89,28 @@ export default function AiTab({ tasks, onApplyChange }: Props) {
           <div key={mi} className={`ai-msg ${m.role === "user" ? "ai-msg-user" : "ai-msg-assistant"}`}>
             {m.role === "assistant" && <div className="ai-avatar">AI</div>}
             <div className="ai-bubble">
-              <div className="ai-msg-text" style={{ whiteSpace: "pre-wrap" }}>{m.content}</div>
+              <div className="ai-msg-text" style={{ whiteSpace: "pre-wrap" }}>
+                {m.content
+                  .replace(/<\|tool_call_start\|>[\s\S]*?<\|tool_call_end\|>/g, "")
+                  .replace(/todoChange\([\s\S]*?\)/g, "")
+                  .trim() || (m.changes?.length ? "" : m.content)}
+              </div>
+              {m.role === "assistant" && (
+                <div className="ai-msg-meta">Model: {getModel()}</div>
+              )}
+              {m.role === "user" && (
+                <div style={{ marginTop: 4, textAlign: "right" }}>
+                  <button className="btn btn-ghost btn-sm" onClick={() => {
+                    setInput(m.content);
+                    setMessages((prev) => {
+                      const out = prev.slice(0, mi);
+                      // also drop following assistant if present
+                      if (prev[mi + 1]?.role === "assistant") return out;
+                      return out;
+                    });
+                  }}>Revert</button>
+                </div>
+              )}
               {m.changes && m.changes.length > 0 && (
                 <div style={{ marginTop: 12 }}>
                   {m.changes.map((c, ci) => (
@@ -122,8 +143,13 @@ export default function AiTab({ tasks, onApplyChange }: Props) {
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) send(); }}
-            placeholder="Message your todo coach... (Ctrl+Enter to send)"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                send();
+              }
+            }}
+            placeholder="Message your todo coach... (Enter to send, Shift+Enter for newline)"
           />
           <div className="ai-composer-foot">
             <span className="ai-composer-hint">API key: {getApiKey() ? "set" : "free tier"}</span>
