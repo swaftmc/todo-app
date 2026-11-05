@@ -18,7 +18,7 @@ export type ProviderId = "kilo" | "openrouter" | "anyrouter";
 
 export const PROVIDERS: Record<ProviderId, { name: string; base: string; model: string; proxy: boolean }> = {
   kilo: { name: "Kilo Gateway", base: "https://ai-gateway.kilo.ai/api/v1", model: "reflection/beam-free", proxy: false },
-  openrouter: { name: "OpenRouter", base: "https://openrouter.ai/api/v1", model: "openrouter/free", proxy: false },
+  openrouter: { name: "OpenRouter", base: "https://openrouter.ai/api/v1", model: "google/gemini-2.0-flash-exp:free", proxy: false },
   anyrouter: { name: "AnyRouter", base: "https://anyrouter.dev/api/v1", model: "anyrouter/free", proxy: false },
 };
 
