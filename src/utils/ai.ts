@@ -11,6 +11,7 @@ export interface TodoChange {
   id?: string;
   parentId?: string | null;
   fields?: Partial<AiTask> & { done?: boolean; title?: string; notes?: string };
+  approved?: boolean;
 }
 
 export type ProviderId = "kilo" | "openrouter" | "anyrouter";

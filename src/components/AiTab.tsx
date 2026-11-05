@@ -109,7 +109,9 @@ export default function AiTab({ tasks, onApplyChange }: Props) {
     updateActive((msgs) => {
       const updated = [...msgs];
       const msg = { ...updated[msgIdx] };
-      if (msg.changes) msg.changes = msg.changes.filter((_, i) => i !== changeIdx);
+      if (msg.changes) {
+        msg.changes = msg.changes.map((c, i) => (i === changeIdx ? { ...c, approved: true } : c));
+      }
       updated[msgIdx] = msg;
       return updated;
     });
@@ -182,27 +184,33 @@ export default function AiTab({ tasks, onApplyChange }: Props) {
                   >↩</button>
                 </div>
               )}
-              {m.changes && m.changes.length > 0 && (
-                <div style={{ marginTop: 12 }}>
-                  {m.changes.map((c, ci) => (
-                    <div key={ci} className="ai-change">
-                      <div className="ai-change-title">{c.action.toUpperCase()} {c.fields?.title ?? c.id ?? ""}</div>
-                      <table className="ai-change-rows">
-                        <tbody>
-                          {Object.entries(c.fields ?? {}).map(([k, v]) => (
-                            <tr key={k}><th>{k}</th><td>{String(v)}</td></tr>
-                          ))}
-                          {c.id && <tr><th>id</th><td>{c.id}</td></tr>}
-                          {c.parentId !== undefined && <tr><th>parentId</th><td>{String(c.parentId)}</td></tr>}
-                        </tbody>
-                      </table>
-                      <div className="ai-change-actions">
-                        <button className="btn btn-primary btn-sm" onClick={() => applyChange(c, mi, ci)}>Approve</button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+                {m.changes && m.changes.length > 0 && (
+                  <div style={{ marginTop: 12 }}>
+                    {m.changes.map((c, ci) => (
+                      c.approved ? (
+                        <div key={ci} className="ai-change" style={{ opacity: 0.6 }}>
+                          <div className="ai-change-title">✓ Approved — {c.action.toUpperCase()} {c.fields?.title ?? c.id ?? ""}</div>
+                        </div>
+                      ) : (
+                        <div key={ci} className="ai-change">
+                          <div className="ai-change-title">{c.action.toUpperCase()} {c.fields?.title ?? c.id ?? ""}</div>
+                          <table className="ai-change-rows">
+                            <tbody>
+                              {Object.entries(c.fields ?? {}).map(([k, v]) => (
+                                <tr key={k}><th>{k}</th><td>{String(v)}</td></tr>
+                              ))}
+                              {c.id && <tr><th>id</th><td>{c.id}</td></tr>}
+                              {c.parentId !== undefined && <tr><th>parentId</th><td>{String(c.parentId)}</td></tr>}
+                            </tbody>
+                          </table>
+                          <div className="ai-change-actions">
+                            <button className="btn btn-primary btn-sm" onClick={() => applyChange(c, mi, ci)}>Approve</button>
+                          </div>
+                        </div>
+                      )
+                    ))}
+                  </div>
+                )}
             </div>
           </div>
         ))}
